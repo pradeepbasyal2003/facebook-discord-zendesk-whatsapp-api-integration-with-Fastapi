@@ -1,4 +1,8 @@
 from fastapi import FastAPI, Request
+from fastapi.responses import RedirectResponse
+from gmail_auth import get_auth_url, fetch_token
+from googleapiclient.discovery import build
+from google.oauth2.credentials import Credentials
 import requests,asyncio,os,logging,httpx
 from dotenv import load_dotenv
 from requests.auth import HTTPBasicAuth
@@ -9,6 +13,8 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 app = FastAPI()
+user_credentials = {}
+
 
 
 #for facebook and whatsapp
@@ -264,3 +270,41 @@ async def api_get_channels():
             return {"error": data.get("error")}
 
         return {"channels": data.get("channels", [])}
+    
+    
+    
+##
+## Gmail OAuth2 Authentication and read mails
+##
+
+@app.get("/auth/login")
+def login():
+    url = get_auth_url()
+    return RedirectResponse(url)
+
+@app.get("/auth/callback")
+def callback(request: Request):
+    code = request.query_params.get("code")
+    creds = fetch_token(code)
+    user_credentials["token"] = creds
+    return {"message": "Authorization successful!"}
+
+@app.get("/gmail/messages")
+def list_messages():
+    
+    creds = Credentials.from_authorized_user_file("token.json")
+    service = build("gmail", "v1", credentials=creds)
+    results = service.users().messages().list(userId='me',).execute()
+    messages = results.get("messages", [])
+    return {"messages": messages}
+
+
+@app.get("/gmail/messages/{message_id}")
+def get_message(message_id:str):
+    creds = Credentials.from_authorized_user_file("token.json")
+    if not creds:
+        return {"error": "User not authenticated"}
+    
+    service = build("gmail", "v1", credentials=creds)
+    results = service.users().messages().get(userId="me",id=message_id).execute()
+    return {"message": results}     

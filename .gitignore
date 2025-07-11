@@ -11,3 +11,6 @@ ENV/
 
 # Environment variables
 .env
+
+credentials.json
+token.json
